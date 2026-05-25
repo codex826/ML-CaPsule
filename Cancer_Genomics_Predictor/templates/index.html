@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cancer Genomics Predictor</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="page-shell">
+        <section class="hero">
+            <p class="eyebrow">Cancer Genomics + Scan Analysis + Chatbot</p>
+            <h1>Predict likely cancer patterns from biomarkers and uploaded scans</h1>
+            <p class="lede">
+                This project demonstrates an offline machine learning workflow for genomics-inspired cancer
+                classification, uploaded scan analysis, and a companion chatbot that explains both results.
+            </p>
+            <div class="hero-stats">
+                <div class="stat-card">
+                    <span>Genomics Accuracy</span>
+                    <strong>{{ "%.2f"|format(genomics_metrics.accuracy * 100) }}%</strong>
+                </div>
+                <div class="stat-card">
+                    <span>Scan Accuracy</span>
+                    <strong>{{ "%.2f"|format(scan_metrics.accuracy * 100) }}%</strong>
+                </div>
+                <div class="stat-card">
+                    <span>Offline Datasets</span>
+                    <strong>
+                        {{ "Ready" if dataset_present and scan_dataset_present else "Will generate on first run" }}
+                    </strong>
+                </div>
+            </div>
+        </section>
+
+        <section class="workspace">
+            <div class="panel">
+                <h2>Prediction Form</h2>
+                <p class="panel-copy">Enter genomics and patient context values to generate a predicted cancer pattern.</p>
+                {% if error %}
+                    <div class="alert">{{ error }}</div>
+                {% endif %}
+                <form action="{{ url_for('predict') }}" method="post" class="genomics-form">
+                    {% for feature in feature_columns %}
+                        <label>
+                            <span>{{ feature_meta[feature].label }}</span>
+                            <input
+                                type="number"
+                                name="{{ feature }}"
+                                min="{{ feature_meta[feature].min }}"
+                                max="{{ feature_meta[feature].max }}"
+                                step="{{ feature_meta[feature].step }}"
+                                value="{{ submitted_values[feature] if submitted_values else feature_meta[feature].default }}"
+                                required
+                            >
+                        </label>
+                    {% endfor %}
+                    <button type="submit">Predict Cancer Pattern</button>
+                </form>
+            </div>
+
+            <div class="panel result-panel">
+                <h2>Genomics Result</h2>
+                {% if genomics_result %}
+                    <div class="result-badge">{{ genomics_result.predicted_class }}</div>
+                    <p class="confidence">Confidence: {{ "%.2f"|format(genomics_result.confidence * 100) }}%</p>
+                    <p class="panel-copy">
+                        Strongest global model markers:
+                        <strong>{{ genomics_result.top_features | join(", ") }}</strong>
+                    </p>
+                    <div class="probability-list">
+                        {% for item in genomics_result.probabilities %}
+                            <div class="probability-row">
+                                <span>{{ item.label }}</span>
+                                <div class="bar-track">
+                                    <div class="bar-fill" style="width: {{ item.probability * 100 }}%"></div>
+                                </div>
+                                <strong>{{ "%.1f"|format(item.probability * 100) }}%</strong>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="panel-copy">Your prediction summary will appear here after you submit the form.</p>
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="workspace image-workspace">
+            <div class="panel">
+                <h2>Upload Scan Image</h2>
+                <p class="panel-copy">
+                    Upload a cancer-related X-ray or scan image to generate a demo pattern prediction and explanation.
+                </p>
+                {% if image_error %}
+                    <div class="alert">{{ image_error }}</div>
+                {% endif %}
+                <form action="{{ url_for('analyze_image') }}" method="post" enctype="multipart/form-data" class="upload-form">
+                    <label class="file-field">
+                        <span>Select medical image</span>
+                        <input type="file" name="scan_image" accept=".png,.jpg,.jpeg,.bmp,image/*" required>
+                    </label>
+                    <button type="submit">Analyze Uploaded Scan</button>
+                </form>
+            </div>
+
+            <div class="panel result-panel">
+                <h2>Scan Analysis Result</h2>
+                {% if image_result %}
+                    <div class="image-preview-card">
+                        <img
+                            src="{{ url_for('static', filename=image_result.image_url) }}"
+                            alt="Uploaded cancer scan"
+                            class="scan-preview"
+                        >
+                    </div>
+                    <div class="result-badge">{{ image_result.predicted_class }}</div>
+                    <p class="confidence">Confidence: {{ "%.2f"|format(image_result.confidence * 100) }}%</p>
+                    <p class="panel-copy">{{ image_result.explanation }}</p>
+                    <div class="signal-list">
+                        {% for signal in image_result.signal_lines %}
+                            <div class="signal-chip">{{ signal }}</div>
+                        {% endfor %}
+                    </div>
+                    <div class="probability-list">
+                        {% for item in image_result.probabilities %}
+                            <div class="probability-row">
+                                <span>{{ item.label }}</span>
+                                <div class="bar-track">
+                                    <div class="bar-fill" style="width: {{ item.probability * 100 }}%"></div>
+                                </div>
+                                <strong>{{ "%.1f"|format(item.probability * 100) }}%</strong>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="panel-copy">
+                        Your uploaded scan preview, class probabilities, and descriptive summary will appear here.
+                    </p>
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="chat-panel">
+            <div class="chat-header">
+                <div>
+                    <p class="eyebrow">Assistant</p>
+                    <h2>Cancer Genomics Chatbot</h2>
+                </div>
+                <p class="panel-copy">Ask about biomarkers, class meanings, uploaded scans, or the latest prediction.</p>
+            </div>
+            <div id="chat-log" class="chat-log">
+                <div class="message bot">
+                    This chatbot is educational and supports the demo models only. Ask me about TP53, MSI score, the latest prediction, or the uploaded scan summary.
+                </div>
+            </div>
+            <form id="chat-form" class="chat-form">
+                <input id="chat-input" type="text" placeholder="Ask about genomics markers or your uploaded scan..." required>
+                <button type="submit">Send</button>
+            </form>
+        </section>
+    </main>
+
+    <script>
+        const chatForm = document.getElementById("chat-form");
+        const chatInput = document.getElementById("chat-input");
+        const chatLog = document.getElementById("chat-log");
+
+        function appendMessage(text, role) {
+            const node = document.createElement("div");
+            node.className = `message ${role}`;
+            node.textContent = text;
+            chatLog.appendChild(node);
+            chatLog.scrollTop = chatLog.scrollHeight;
+        }
+
+        chatForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const message = chatInput.value.trim();
+            if (!message) {
+                return;
+            }
+
+            appendMessage(message, "user");
+            chatInput.value = "";
+
+            const response = await fetch("{{ url_for('chat') }}", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ message })
+            });
+
+            const data = await response.json();
+            appendMessage(data.reply, "bot");
+        });
+    </script>
+</body>
+</html>
